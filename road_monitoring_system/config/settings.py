@@ -40,7 +40,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'apps.potholes',
+    'road_monitoring_system.apps.potholes',
+    'road_monitoring_system.apps.users',
+    'road_monitoring_system.apps.analytics',
 ]
 
 MIDDLEWARE = [
