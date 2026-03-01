@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Urban Road Intelligence — Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+
+    header {
+      background: #1e293b;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; color: #f8fafc; }
+    header span { font-size: 0.85rem; color: #94a3b8; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      padding: 1.5rem 2rem;
+    }
+    .stat-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+    .stat-card .label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 0.25rem; }
+    .stat-card.total .value  { color: #60a5fa; }
+    .stat-card.low .value    { color: #22c55e; }
+    .stat-card.medium .value { color: #f59e0b; }
+    .stat-card.high .value   { color: #ef4444; }
+
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 1rem;
+      padding: 0 2rem 2rem;
+      height: calc(100vh - 220px);
+    }
+
+    #map {
+      border-radius: 10px;
+      border: 1px solid #334155;
+      height: 100%;
+    }
+
+    .table-panel {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .table-panel h2 {
+      padding: 1rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-bottom: 1px solid #334155;
+      color: #f1f5f9;
+    }
+    .table-scroll { overflow-y: auto; flex: 1; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    th {
+      background: #0f172a;
+      color: #94a3b8;
+      text-align: left;
+      padding: 0.6rem 1rem;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+    }
+    td { padding: 0.6rem 1rem; border-bottom: 1px solid #1e293b; }
+    tr:hover td { background: #243044; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge.low    { background: #14532d; color: #4ade80; }
+    .badge.medium { background: #451a03; color: #fbbf24; }
+    .badge.high   { background: #450a0a; color: #f87171; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🛣️ Urban Road Intelligence</h1>
+    <span>Pothole Detection Dashboard &nbsp;·&nbsp; {{ total }} events recorded</span>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat-card total">
+    <div class="label">Total Events</div>
+    <div class="value">{{ total }}</div>
+  </div>
+  <div class="stat-card low">
+    <div class="label">Low Severity</div>
+    <div class="value">{{ severity_counts.low }}</div>
+  </div>
+  <div class="stat-card medium">
+    <div class="label">Medium Severity</div>
+    <div class="value">{{ severity_counts.medium }}</div>
+  </div>
+  <div class="stat-card high">
+    <div class="label">High Severity</div>
+    <div class="value">{{ severity_counts.high }}</div>
+  </div>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+
+  <div class="table-panel">
+    <h2>Recent Events</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Vibration</th>
+            <th>Lat / Lng</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td><span class="badge {{ event.severity }}">{{ event.severity }}</span></td>
+            <td>{{ event.vibration_value }}</td>
+            <td>{{ event.latitude|floatformat:4 }}, {{ event.longitude|floatformat:4 }}</td>
+            <td>{{ event.created_at|date:"M d, H:i" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map').setView([13.0827, 80.2707], 12);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19,
+  }).addTo(map);
+
+  const points = {{ map_points|safe }};
+
+  points.forEach(p => {
+    const marker = L.circleMarker([p.lat, p.lng], {
+      radius: 8,
+      fillColor: p.color,
+      color: '#fff',
+      weight: 1,
+      opacity: 0.9,
+      fillOpacity: 0.85,
+    }).addTo(map);
+
+    marker.bindPopup(`
+      <b style="color:${p.color}">${p.severity.toUpperCase()}</b><br/>
+      Vibration: ${p.vibration}</b><br/>
+      ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}<br/>
+      <small>${p.created_at}</small>
+    `);
+  });
+</script>
+
+</body>
+</html>
